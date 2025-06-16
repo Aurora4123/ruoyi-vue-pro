@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.cms.controller.admin.students;
 
-import cn.iocoder.yudao.module.cms.dal.dataobject.users.User;
+import cn.iocoder.yudao.module.cms.dal.dataobject.depts.DepartmentDO;
+import cn.iocoder.yudao.module.cms.dal.dataobject.users.UserDO;
 import cn.iocoder.yudao.module.cms.service.users.UserService;
 import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
@@ -10,7 +11,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Operation;
 
-import javax.validation.constraints.*;
 import javax.validation.*;
 import javax.servlet.http.*;
 import java.util.*;
@@ -110,12 +110,27 @@ public class StudentController {
     @GetMapping("/getUserList")
     @Operation(summary = "获得用户列表")
     @PreAuthorize("@ss.hasPermission('cms:student:query')")
-    public Map<String, Object> getUserList() {
-        Map<String, Object> result = new HashMap<>();
-        result.put("code", 0);
-        result.put("users", userService.getUserList());
-        result.put("status", "success");
-        return result;
+    public CommonResult<List<UserRespVO>> getUserList(@RequestHeader(name = "Authorization") String token) {
+        List<UserDO> userList = userService.getUserList();
+        List<UserRespVO> userRespVOList = BeanUtils.toBean(userList, UserRespVO.class);
+        return success(userRespVOList);
+    }
+    @GetMapping("/getCollegeList")
+    @Operation(summary = "获得学院列表")
+    @PreAuthorize("@ss.hasPermission('cms:student:query')")
+    public CommonResult<List<DepartmentRespVO>> getCollegeList(@RequestHeader(name = "Authorization") String token) {
+        List<DepartmentDO> collegeList = userService.getCollegeList();
+        List<DepartmentRespVO> collegeRespVOList = BeanUtils.toBean(collegeList, DepartmentRespVO.class);
+        return success(collegeRespVOList);
+    }
+
+    @GetMapping("/getMajorList")
+    @Operation(summary = "获得专业列表")
+    @PreAuthorize("@ss.hasPermission('cms:student:query')")
+    public CommonResult<List<DepartmentRespVO>> getMajorList(@RequestHeader(name = "Authorization") String token) {
+        List<DepartmentDO> majorList = userService.getMajorList();
+        List<DepartmentRespVO> majorRespVOList = BeanUtils.toBean(majorList, DepartmentRespVO.class);
+        return success(majorRespVOList);
     }
 
 }
