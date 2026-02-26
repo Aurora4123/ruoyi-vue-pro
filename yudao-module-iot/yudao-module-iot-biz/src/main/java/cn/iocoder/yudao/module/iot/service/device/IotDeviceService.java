@@ -2,16 +2,26 @@ package cn.iocoder.yudao.module.iot.service.device;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.iot.controller.admin.device.vo.device.*;
+import cn.iocoder.yudao.module.iot.core.biz.dto.IotDeviceAuthReqDTO;
+import cn.iocoder.yudao.module.iot.core.biz.dto.IotSubDeviceRegisterFullReqDTO;
+import cn.iocoder.yudao.module.iot.core.enums.device.IotDeviceStateEnum;
+import cn.iocoder.yudao.module.iot.core.mq.message.IotDeviceMessage;
+import cn.iocoder.yudao.module.iot.core.topic.IotDeviceIdentity;
+import cn.iocoder.yudao.module.iot.core.topic.auth.IotDeviceRegisterReqDTO;
+import cn.iocoder.yudao.module.iot.core.topic.auth.IotDeviceRegisterRespDTO;
+import cn.iocoder.yudao.module.iot.core.topic.auth.IotSubDeviceRegisterRespDTO;
+import cn.iocoder.yudao.module.iot.core.topic.topo.IotDeviceTopoGetRespDTO;
 import cn.iocoder.yudao.module.iot.dal.dataobject.device.IotDeviceDO;
-import cn.iocoder.yudao.module.iot.enums.device.IotDeviceStateEnum;
 
 import javax.annotation.Nullable;
 import javax.validation.Valid;
-import javax.validation.constraints.NotEmpty;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+
+import static cn.iocoder.yudao.framework.common.util.collection.CollectionUtils.convertMap;
 
 /**
  * IoT 设备 Service 接口
@@ -29,35 +39,19 @@ public interface IotDeviceService {
     Long createDevice(@Valid IotDeviceSaveReqVO createReqVO);
 
     /**
-     * 【设备注册】创建设备
-     *
-     * @param productKey 产品标识
-     * @param deviceName 设备名称
-     * @param gatewayId  网关设备 ID
-     * @return 设备
-     */
-    IotDeviceDO createDevice(@NotEmpty(message = "产品标识不能为空") String productKey,
-                             @NotEmpty(message = "设备名称不能为空") String deviceName,
-                             Long gatewayId);
-
-    /**
      * 更新设备
      *
      * @param updateReqVO 更新信息
      */
     void updateDevice(@Valid IotDeviceSaveReqVO updateReqVO);
 
-    // TODO @芋艿：先这么实现。未来看情况，要不要自己实现
-
     /**
-     * 更新设备的所属网关
+     * 更新设备状态
      *
-     * @param id        编号
-     * @param gatewayId 网关设备 ID
+     * @param device 设备信息
+     * @param state 状态
      */
-    default void updateDeviceGateway(Long id, Long gatewayId) {
-        updateDevice(new IotDeviceSaveReqVO().setId(id).setGatewayId(gatewayId));
-    }
+    void updateDeviceState(IotDeviceDO device, Integer state);
 
     /**
      * 更新设备状态
@@ -97,6 +91,14 @@ public interface IotDeviceService {
     IotDeviceDO validateDeviceExists(Long id);
 
     /**
+     * 【缓存】校验设备是否存在
+     *
+     * @param id 设备 ID
+     * @return 设备对象
+     */
+    IotDeviceDO validateDeviceExistsFromCache(Long id);
+
+    /**
      * 获得设备
      *
      * @param id 编号
@@ -105,12 +107,25 @@ public interface IotDeviceService {
     IotDeviceDO getDevice(Long id);
 
     /**
-     * 根据设备 key 获得设备
+     * 【缓存】获得设备信息
+     * <p>
+     * 注意：该方法会忽略租户信息，所以调用时，需要确认会不会有跨租户访问的风险！！！
      *
-     * @param deviceKey 编号
+     * @param id 编号
      * @return IoT 设备
      */
-    IotDeviceDO getDeviceByDeviceKey(String deviceKey);
+    IotDeviceDO getDeviceFromCache(Long id);
+
+    /**
+     * 【缓存】根据产品 key 和设备名称，获得设备信息
+     * <p>
+     * 注意：该方法会忽略租户信息，所以调用时，需要确认会不会有跨租户访问的风险！！！
+     *
+     * @param productKey 产品 key
+     * @param deviceName 设备名称
+     * @return 设备信息
+     */
+    IotDeviceDO getDeviceFromCache(String productKey, String deviceName);
 
     /**
      * 获得设备分页
@@ -121,12 +136,14 @@ public interface IotDeviceService {
     PageResult<IotDeviceDO> getDevicePage(IotDevicePageReqVO pageReqVO);
 
     /**
-     * 基于设备类型，获得设备列表
+     * 根据条件，获得设备列表
      *
      * @param deviceType 设备类型
+     * @param productId 产品编号
      * @return 设备列表
      */
-    List<IotDeviceDO> getDeviceListByDeviceType(@Nullable Integer deviceType);
+    List<IotDeviceDO> getDeviceListByCondition(@Nullable Integer deviceType,
+                                               @Nullable Long productId);
 
     /**
      * 获得状态，获得设备列表
@@ -137,20 +154,12 @@ public interface IotDeviceService {
     List<IotDeviceDO> getDeviceListByState(Integer state);
 
     /**
-     * 根据产品ID获取设备列表
+     * 根据产品编号，获取设备列表
      *
-     * @param productId 产品ID，用于查询特定产品的设备列表
-     * @return 返回与指定产品ID关联的设备列表，列表中的每个元素为IotDeviceDO对象
+     * @param productId 产品编号
+     * @return 设备列表
      */
     List<IotDeviceDO> getDeviceListByProductId(Long productId);
-
-    /**
-     * 根据设备ID列表获取设备信息列表
-     *
-     * @param deviceIdList 设备ID列表，包含需要查询的设备ID
-     * @return 返回与设备ID列表对应的设备信息列表，列表中的每个元素为IotDeviceDO对象
-     */
-    List<IotDeviceDO> getDeviceListByIdList(List<Long> deviceIdList);
 
     /**
      * 基于产品编号，获得设备数量
@@ -167,17 +176,6 @@ public interface IotDeviceService {
      * @return 设备数量
      */
     Long getDeviceCountByGroupId(Long groupId);
-
-    /**
-     * 【缓存】根据产品 key 和设备名称，获得设备信息
-     * <p>
-     * 注意：该方法会忽略租户信息，所以调用时，需要确认会不会有跨租户访问的风险！！！
-     *
-     * @param productKey 产品 key
-     * @param deviceName 设备名称
-     * @return 设备信息
-     */
-    IotDeviceDO getDeviceByProductKeyAndDeviceNameFromCache(String productKey, String deviceName);
 
     /**
      * 导入设备
@@ -197,12 +195,12 @@ public interface IotDeviceService {
     Long getDeviceCount(@Nullable LocalDateTime createTime);
 
     /**
-     * 获取 MQTT 连接参数
+     * 获得设备认证信息
      *
-     * @param deviceId 设备 ID
+     * @param id 设备编号
      * @return MQTT 连接参数
      */
-    IotDeviceMqttConnectionParamsRespVO getMqttConnectionParams(Long deviceId);
+    IotDeviceAuthInfoRespVO getDeviceAuthInfo(Long id);
 
     /**
      * 获得各个产品下的设备数量 Map
@@ -218,5 +216,163 @@ public interface IotDeviceService {
      *         value: 设备数量
      */
     Map<Integer, Long> getDeviceCountMapByState();
+
+    /**
+     * 通过产品标识和设备名称列表获取设备列表
+     *
+     * @param productKey  产品标识
+     * @param deviceNames 设备名称列表
+     * @return 设备列表
+     */
+    List<IotDeviceDO> getDeviceListByProductKeyAndNames(String productKey, List<String> deviceNames);
+
+    /**
+     * 认证设备
+     *
+     * @param authReqDTO 认证信息
+     * @return 是否认证成功
+     */
+    boolean authDevice(@Valid IotDeviceAuthReqDTO authReqDTO);
+
+    /**
+     * 校验设备是否存在
+     *
+     * @param ids 设备编号数组
+     */
+    List<IotDeviceDO> validateDeviceListExists(Collection<Long> ids);
+
+    /**
+     * 获得设备列表
+     *
+     * @param ids 设备编号数组
+     * @return 设备列表
+     */
+    List<IotDeviceDO> getDeviceList(Collection<Long> ids);
+
+    /**
+     * 获得设备 Map
+     *
+     * @param ids 设备编号数组
+     * @return 设备 Map
+     */
+    default Map<Long, IotDeviceDO> getDeviceMap(Collection<Long> ids) {
+        return convertMap(getDeviceList(ids), IotDeviceDO::getId);
+    }
+
+    /**
+     * 更新设备固件版本
+     *
+     * @param deviceId 设备编号
+     * @param firmwareId 固件编号
+     */
+    void updateDeviceFirmware(Long deviceId, Long firmwareId);
+
+    /**
+     * 更新设备定位信息（GeoLocation 上报时调用）
+     *
+     * @param device    设备信息（用于清除缓存）
+     * @param longitude 经度
+     * @param latitude  纬度
+     */
+    void updateDeviceLocation(IotDeviceDO device, BigDecimal longitude, BigDecimal latitude);
+
+    /**
+     * 获得有位置信息的设备列表
+     *
+     * @return 设备列表
+     */
+    List<IotDeviceDO> getDeviceListByHasLocation();
+
+    // ========== 网关-拓扑管理（后台操作） ==========
+
+    /**
+     * 绑定子设备到网关
+     *
+     * @param subIds    子设备编号列表
+     * @param gatewayId 网关设备编号
+     */
+    void bindDeviceGateway(Collection<Long> subIds, Long gatewayId);
+
+    /**
+     * 解绑子设备与网关
+     *
+     * @param subIds    子设备编号列表
+     * @param gatewayId 网关设备编号
+     */
+    void unbindDeviceGateway(Collection<Long> subIds, Long gatewayId);
+
+    /**
+     * 获取未绑定网关的子设备分页
+     *
+     * @param pageReqVO 分页查询参数（仅使用 productId、deviceName、nickname）
+     * @return 子设备分页
+     */
+    PageResult<IotDeviceDO> getUnboundSubDevicePage(IotDevicePageReqVO pageReqVO);
+
+    /**
+     * 根据网关编号获取子设备列表
+     *
+     * @param gatewayId 网关设备编号
+     * @return 子设备列表
+     */
+    List<IotDeviceDO> getDeviceListByGatewayId(Long gatewayId);
+
+    // ========== 网关-拓扑管理（设备上报） ==========
+
+    /**
+     * 处理添加拓扑关系消息（网关设备上报）
+     *
+     * @param message       消息
+     * @param gatewayDevice 网关设备
+     * @return 成功添加的子设备列表
+     */
+    List<IotDeviceIdentity> handleTopoAddMessage(IotDeviceMessage message, IotDeviceDO gatewayDevice);
+
+    /**
+     * 处理删除拓扑关系消息（网关设备上报）
+     *
+     * @param message       消息
+     * @param gatewayDevice 网关设备
+     * @return 成功删除的子设备列表
+     */
+    List<IotDeviceIdentity> handleTopoDeleteMessage(IotDeviceMessage message, IotDeviceDO gatewayDevice);
+
+    /**
+     * 处理获取拓扑关系消息（网关设备上报）
+     *
+     * @param gatewayDevice 网关设备
+     * @return 拓扑关系响应
+     */
+    IotDeviceTopoGetRespDTO handleTopoGetMessage(IotDeviceDO gatewayDevice);
+
+    // ========== 设备动态注册 ==========
+
+    /**
+     * 直连/网关设备动态注册
+     *
+     * @param reqDTO 动态注册请求
+     * @return 注册结果（包含 DeviceSecret）
+     */
+    IotDeviceRegisterRespDTO registerDevice(@Valid IotDeviceRegisterReqDTO reqDTO);
+
+    /**
+     * 网关子设备动态注册
+     * <p>
+     * 与 {@link #handleSubDeviceRegisterMessage} 方法的区别：
+     * 该方法网关设备信息通过 reqDTO 参数传入，而 {@link #handleSubDeviceRegisterMessage} 方法通过 gatewayDevice 参数传入
+     *
+     * @param reqDTO 子设备注册请求（包含网关设备信息）
+     * @return 注册结果列表
+     */
+    List<IotSubDeviceRegisterRespDTO> registerSubDevices(@Valid IotSubDeviceRegisterFullReqDTO reqDTO);
+
+    /**
+     * 处理子设备动态注册消息（网关设备上报）
+     *
+     * @param message       消息
+     * @param gatewayDevice 网关设备
+     * @return 注册结果列表
+     */
+    List<IotSubDeviceRegisterRespDTO> handleSubDeviceRegisterMessage(IotDeviceMessage message, IotDeviceDO gatewayDevice);
 
 }

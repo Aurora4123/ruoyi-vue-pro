@@ -40,10 +40,16 @@ public interface CouponTemplateMapper extends BaseMapperX<CouponTemplateDO> {
                 .orderByDesc(CouponTemplateDO::getId));
     }
 
-    default void updateTakeCount(Long id, Integer incrCount) {
-        update(null, new LambdaUpdateWrapper<CouponTemplateDO>()
+    default int updateTakeCount(Long id, Integer incrCount) {
+        LambdaUpdateWrapper<CouponTemplateDO> updateWrapper = new LambdaUpdateWrapper<CouponTemplateDO>()
                 .eq(CouponTemplateDO::getId, id)
-                .setSql("take_count = take_count + " + incrCount));
+                .setSql("take_count = take_count + " + incrCount);
+        // 增加已领取的数量（incrCount 为正数），需要考虑发放数量 totalCount 的限制
+        if (incrCount > 0) {
+            updateWrapper.and(i -> i.apply("take_count < total_count")
+                    .or().eq(CouponTemplateDO::getTotalCount, CouponTemplateDO.TOTAL_COUNT_MAX));
+        }
+        return update(updateWrapper);
     }
 
     default List<CouponTemplateDO> selectListByTakeType(Integer takeType) {
@@ -70,7 +76,7 @@ public interface CouponTemplateMapper extends BaseMapperX<CouponTemplateDO> {
                             .in(CouponTemplateDO::getTakeType, canTakeTypes) // 2. 领取方式一致
                             .and(ww -> ww.gt(CouponTemplateDO::getValidEndTime, LocalDateTime.now())  // 3.1 未过期
                                     .or().eq(CouponTemplateDO::getValidityType, CouponTemplateValidityTypeEnum.TERM.getType())) // 3.2 领取之后
-                            .apply(" (take_count < total_count OR total_count = -1)"); // 4. 剩余数量大于 0，或者无限领取
+                            .apply(" (take_count < total_count OR total_count = " + CouponTemplateDO.TOTAL_COUNT_MAX + ")"); // 4. 剩余数量大于 0，或者无限领取
         }
         return canTakeConsumer;
     }

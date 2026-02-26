@@ -14,6 +14,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import javax.servlet.http.HttpServletRequest;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +38,17 @@ public class HttpUtils {
         return URLEncoder.encode(value, StandardCharsets.UTF_8.name());
     }
 
+    /**
+     * 解码 URL 参数
+     *
+     * @param value 参数
+     * @return 解码后的参数
+     */
+    @SneakyThrows
+    public static String decodeUtf8(String value) {
+        return URLDecoder.decode(value, StandardCharsets.UTF_8.name());
+    }
+
     @SuppressWarnings("unchecked")
     public static String replaceUrlQuery(String url, String key, String value) {
         UrlBuilder builder = UrlBuilder.of(url, Charset.defaultCharset());
@@ -49,8 +61,15 @@ public class HttpUtils {
         return builder.build();
     }
 
-    private String append(String base, Map<String, ?> query, boolean fragment) {
-        return append(base, query, null, fragment);
+    public static String removeUrlQuery(String url) {
+        if (!StrUtil.contains(url, '?')) {
+            return url;
+        }
+        UrlBuilder builder = UrlBuilder.of(url, Charset.defaultCharset());
+        // 移除 query、fragment
+        builder.setQuery(null);
+        builder.setFragment(null);
+        return builder.build();
     }
 
     /**

@@ -1,7 +1,10 @@
 package cn.iocoder.yudao.module.iot.controller.admin.product.vo.product;
 
 import cn.iocoder.yudao.framework.common.validation.InEnum;
-import cn.iocoder.yudao.module.iot.enums.product.*;
+import cn.iocoder.yudao.module.iot.core.enums.IotProtocolTypeEnum;
+import cn.iocoder.yudao.module.iot.core.enums.IotSerializeTypeEnum;
+import cn.iocoder.yudao.module.iot.enums.product.IotNetTypeEnum;
+import cn.iocoder.yudao.module.iot.enums.product.IotProductDeviceTypeEnum;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -44,18 +47,18 @@ public class IotProductSaveReqVO {
     @InEnum(value = IotNetTypeEnum.class, message = "联网方式必须是 {value}")
     private Integer netType;
 
-    @Schema(description = "接入网关协议", requiredMode = Schema.RequiredMode.REQUIRED, example = "0")
-    @InEnum(value = IotProtocolTypeEnum.class, message = "接入网关协议必须是 {value}")
-    private Integer protocolType;
+    @Schema(description = "协议类型", requiredMode = Schema.RequiredMode.REQUIRED, example = "mqtt")
+    @InEnum(value = IotProtocolTypeEnum.class, message = "协议类型必须是 {value}")
+    @NotEmpty(message = "协议类型不能为空")
+    private String protocolType;
 
-    @Schema(description = "数据格式", requiredMode = Schema.RequiredMode.REQUIRED, example = "0")
-    @InEnum(value = IotDataFormatEnum.class, message = "数据格式必须是 {value}")
-    @NotNull(message = "数据格式不能为空")
-    private Integer dataFormat;
+    @Schema(description = "序列化类型", requiredMode = Schema.RequiredMode.REQUIRED, example = "json")
+    @InEnum(value = IotSerializeTypeEnum.class, message = "序列化类型必须是 {value}")
+    @NotEmpty(message = "序列化类型不能为空")
+    private String serializeType;
 
-    @Schema(description = "数据校验级别", requiredMode = Schema.RequiredMode.REQUIRED, example = "0")
-    @InEnum(value = IotValidateTypeEnum.class, message = "数据校验级别必须是 {value}")
-    @NotNull(message = "数据校验级别不能为空")
-    private Integer validateType;
+    @Schema(description = "是否开启动态注册", example = "false")
+    @NotNull(message = "是否开启动态注册不能为空")
+    private Boolean registerEnabled;
 
 }

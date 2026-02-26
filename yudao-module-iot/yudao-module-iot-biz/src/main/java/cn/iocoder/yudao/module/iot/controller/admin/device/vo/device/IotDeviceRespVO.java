@@ -1,12 +1,13 @@
 package cn.iocoder.yudao.module.iot.controller.admin.device.vo.device;
 
+import cn.idev.excel.annotation.ExcelIgnoreUnannotated;
+import cn.idev.excel.annotation.ExcelProperty;
 import cn.iocoder.yudao.framework.excel.core.annotations.DictFormat;
 import cn.iocoder.yudao.framework.excel.core.convert.DictConvert;
-import com.alibaba.excel.annotation.ExcelIgnoreUnannotated;
-import com.alibaba.excel.annotation.ExcelProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
 
@@ -19,10 +20,6 @@ public class IotDeviceRespVO {
 
     @Schema(description = "设备编号", requiredMode = Schema.RequiredMode.REQUIRED, example = "177")
     private Long id;
-
-    @Schema(description = "设备唯一标识符", requiredMode = Schema.RequiredMode.REQUIRED)
-    @ExcelProperty("设备唯一标识符")
-    private String deviceKey;
 
     @Schema(description = "设备名称", requiredMode = Schema.RequiredMode.REQUIRED, example = "王五")
     @ExcelProperty("设备名称")
@@ -46,6 +43,9 @@ public class IotDeviceRespVO {
     @Schema(description = "产品编号", requiredMode = Schema.RequiredMode.REQUIRED, example = "26202")
     @ExcelProperty("产品编号")
     private Long productId;
+
+    @Schema(description = "产品名称", example = "温湿度传感器")
+    private String productName; // 只有部分接口返回，例如 getDeviceLocationList
 
     @Schema(description = "产品标识", requiredMode = Schema.RequiredMode.REQUIRED)
     @ExcelProperty("产品 Key")
@@ -79,12 +79,14 @@ public class IotDeviceRespVO {
     @ExcelProperty("设备密钥")
     private String deviceSecret;
 
-    @Schema(description = "认证类型（如一机一密、动态注册）", example = "2")
-    @ExcelProperty("认证类型（如一机一密、动态注册）")
-    private String authType;
-
     @Schema(description = "设备配置", example = "{\"abc\": \"efg\"}")
     private String config;
+
+    @Schema(description = "设备位置的纬度", example = "45.000000")
+    private BigDecimal latitude;
+
+    @Schema(description = "设备位置的经度", example = "45.000000")
+    private BigDecimal longitude;
 
     @Schema(description = "创建时间", requiredMode = Schema.RequiredMode.REQUIRED)
     @ExcelProperty("创建时间")

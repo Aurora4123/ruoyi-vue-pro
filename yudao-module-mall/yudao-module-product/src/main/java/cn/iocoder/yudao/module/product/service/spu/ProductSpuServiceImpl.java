@@ -109,7 +109,7 @@ public class ProductSpuServiceImpl implements ProductSpuService {
         // sku 单价最低的商品的成本价格
         spu.setCostPrice(getMinValue(skus, ProductSkuSaveReqVO::getCostPrice));
         // skus 库存总数
-        spu.setStock(getSumValue(skus, ProductSkuSaveReqVO::getStock, Integer::sum));
+        spu.setStock(getSumValue(skus, ProductSkuSaveReqVO::getStock, Math::addExact));
         // 若是 spu 已有状态则不处理
         if (spu.getStatus() == null) {
             spu.setStatus(ProductSpuStatusEnum.ENABLE.getStatus()); // 默认状态为上架
@@ -137,7 +137,7 @@ public class ProductSpuServiceImpl implements ProductSpuService {
             return Collections.emptyList();
         }
         // 获得商品信息
-        List<ProductSpuDO> list = productSpuMapper.selectBatchIds(ids);
+        List<ProductSpuDO> list = productSpuMapper.selectByIds(ids);
         Map<Long, ProductSpuDO> spuMap = CollectionUtils.convertMap(list, ProductSpuDO::getId);
         // 校验
         ids.forEach(id -> {
@@ -202,7 +202,7 @@ public class ProductSpuServiceImpl implements ProductSpuService {
         if (CollUtil.isEmpty(ids)) {
             return Collections.emptyList();
         }
-        Map<Long, ProductSpuDO> spuMap = convertMap(productSpuMapper.selectBatchIds(ids), ProductSpuDO::getId);
+        Map<Long, ProductSpuDO> spuMap = convertMap(productSpuMapper.selectByIds(ids), ProductSpuDO::getId);
         // 需要按照 ids 顺序返回。例如说：店铺装修选择了 [3, 1, 2] 三个商品，返回结果还是 [3, 1, 2]  这样的顺序
         return convertList(ids, spuMap::get);
     }

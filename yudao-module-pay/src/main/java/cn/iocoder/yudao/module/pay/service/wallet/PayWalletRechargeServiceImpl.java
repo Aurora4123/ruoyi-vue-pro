@@ -2,8 +2,10 @@ package cn.iocoder.yudao.module.pay.service.wallet;
 
 import cn.hutool.core.date.LocalDateTimeUtil;
 import cn.hutool.core.lang.Assert;
+import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.extra.spring.SpringUtil;
+import cn.iocoder.yudao.framework.common.enums.UserTypeEnum;
 import cn.iocoder.yudao.framework.common.pojo.PageParam;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.pay.api.order.dto.PayOrderCreateReqDTO;
@@ -16,12 +18,14 @@ import cn.iocoder.yudao.module.pay.dal.dataobject.wallet.PayWalletDO;
 import cn.iocoder.yudao.module.pay.dal.dataobject.wallet.PayWalletRechargeDO;
 import cn.iocoder.yudao.module.pay.dal.dataobject.wallet.PayWalletRechargePackageDO;
 import cn.iocoder.yudao.module.pay.dal.mysql.wallet.PayWalletRechargeMapper;
+import cn.iocoder.yudao.module.pay.enums.PayChannelEnum;
 import cn.iocoder.yudao.module.pay.enums.order.PayOrderStatusEnum;
 import cn.iocoder.yudao.module.pay.enums.refund.PayRefundStatusEnum;
 import cn.iocoder.yudao.module.pay.enums.wallet.PayWalletBizTypeEnum;
 import cn.iocoder.yudao.module.pay.framework.pay.config.PayProperties;
 import cn.iocoder.yudao.module.pay.service.order.PayOrderService;
 import cn.iocoder.yudao.module.system.api.social.SocialClientApi;
+import cn.iocoder.yudao.module.system.api.social.dto.SocialWxaOrderUploadShippingInfoReqDTO;
 import cn.iocoder.yudao.module.system.api.social.dto.SocialWxaSubscribeMessageSendReqDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -60,8 +64,6 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
     private PayWalletService payWalletService;
     @Resource
     private PayOrderService payOrderService;
-//    @Resource
-//    private PayRefundService payRefundService;
     @Resource
     private PayWalletRechargePackageService payWalletRechargePackageService;
 
@@ -95,6 +97,7 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
         // 2.1 创建支付单
         Long payOrderId = payOrderService.createOrder(new PayOrderCreateReqDTO()
                 .setAppKey(payProperties.getWalletPayAppKey()).setUserIp(userIp)
+                .setUserId(userId).setUserType(userType) // 用户信息
                 .setMerchantOrderId(recharge.getId().toString()) // 业务的订单编号
                 .setSubject(WALLET_RECHARGE_ORDER_SUBJECT).setBody("")
                 .setPrice(recharge.getPayPrice())
@@ -156,9 +159,8 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
 
     @Async
     public void sendWalletRechargerPaidMessage(Long payOrderId, PayWalletRechargeDO walletRecharge) {
-        // 1. 获得会员钱包信息
+        // 1. 构建并发送模版消息
         PayWalletDO wallet = payWalletService.getWallet(walletRecharge.getWalletId());
-        // 2. 构建并发送模版消息
         socialClientApi.sendWxaSubscribeMessage(new SocialWxaSubscribeMessageSendReqDTO()
                 .setUserId(wallet.getUserId()).setUserType(wallet.getUserType())
                 .setTemplateTitle(WXA_WALLET_RECHARGER_PAID)
@@ -167,6 +169,23 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
                 .addMessage("amount2", fenToYuanStr(walletRecharge.getTotalPrice())) // 充值金额
                 .addMessage("time3", LocalDateTimeUtil.formatNormal(walletRecharge.getCreateTime())) // 充值时间
                 .addMessage("phrase4", "充值成功")); // 充值状态
+
+        // 2. 调用接口上传虚拟物品发货信息
+        // 注意：只有微信小程序支付的订单，才需要同步
+        PayOrderDO payOrder = payOrderService.getOrder(payOrderId);
+        if (ObjUtil.notEqual(payOrder.getChannelCode(), PayChannelEnum.WX_LITE.getCode())) {
+            return;
+        }
+        SocialWxaOrderUploadShippingInfoReqDTO reqDTO = new SocialWxaOrderUploadShippingInfoReqDTO()
+                .setTransactionId(payOrder.getChannelOrderNo())
+                .setOpenid(payOrder.getChannelUserId())
+                .setItemDesc(payOrder.getSubject())
+                .setLogisticsType(SocialWxaOrderUploadShippingInfoReqDTO.LOGISTICS_TYPE_VIRTUAL); // 虚拟物品发货类型
+        try {
+            socialClientApi.uploadWxaOrderShippingInfo(UserTypeEnum.MEMBER.getValue(), reqDTO);
+        } catch (Exception ex) {
+            log.error("[sendWalletRechargerPaidMessage][订单({}) 上传订单物流信息到微信小程序失败]", payOrder, ex);
+        }
     }
 
     @Override
@@ -189,6 +208,7 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
         String refundId = walletRechargeId + "-refund";
         Long payRefundId = payRefundApi.createRefund(new PayRefundCreateReqDTO()
                 .setAppKey(payProperties.getWalletPayAppKey()).setUserIp(userIp)
+                .setUserId(wallet.getUserId()).setUserType(wallet.getUserType()) // 用户信息
                 .setMerchantOrderId(walletRechargeId)
                 .setMerchantRefundId(refundId)
                 .setReason("想退钱").setPrice(walletRecharge.getPayPrice()));
@@ -200,9 +220,8 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateWalletRechargeRefunded(Long id, Long refundId, Long payRefundId) {
+    public void updateWalletRechargeRefunded(Long id, String refundId, Long payRefundId) {
         // 1.1 获取钱包充值记录
-        // 说明：因为 id 和 refundId 是相同的，所以直接使用 id 查询即可！
         PayWalletRechargeDO walletRecharge = walletRechargeMapper.selectById(id);
         if (walletRecharge == null) {
             log.error("[updateWalletRechargerPaid][钱包充值记录不存在，钱包充值记录 id({})]", id);
@@ -254,8 +273,8 @@ public class PayWalletRechargeServiceImpl implements PayWalletRechargeService {
                     walletRecharge.getId(), payRefundId, toJsonString(walletRecharge), toJsonString(payRefund));
             throw exception(WALLET_RECHARGE_REFUND_FAIL_REFUND_PRICE_NOT_MATCH);
         }
-        // 2.3 校验退款订单商户订单是否匹配
-        if (notEqual(payRefund.getMerchantRefundId(), walletRecharge.getId().toString())) {
+        // 2.3 校验退款订单商户退款单是否匹配
+        if (notEqual(payRefund.getMerchantRefundId(), walletRecharge.getId() + "-refund")) {
             log.error("[validateWalletRechargeCanRefunded][钱包({}) 退款单不匹配({})，请进行处理！payRefund 数据是：{}]",
                     walletRecharge.getId(), payRefundId, toJsonString(payRefund));
             throw exception(WALLET_RECHARGE_REFUND_FAIL_REFUND_ORDER_ID_ERROR);

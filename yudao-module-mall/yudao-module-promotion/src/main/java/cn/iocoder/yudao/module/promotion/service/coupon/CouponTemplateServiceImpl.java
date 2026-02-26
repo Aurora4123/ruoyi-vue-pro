@@ -1,6 +1,5 @@
 package cn.iocoder.yudao.module.promotion.service.coupon;
 
-import cn.hutool.core.util.ObjUtil;
 import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.product.api.category.ProductCategoryApi;
@@ -22,8 +21,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
-import static cn.iocoder.yudao.module.promotion.enums.ErrorCodeConstants.COUPON_TEMPLATE_NOT_EXISTS;
-import static cn.iocoder.yudao.module.promotion.enums.ErrorCodeConstants.COUPON_TEMPLATE_TOTAL_COUNT_TOO_SMALL;
+import static cn.iocoder.yudao.module.promotion.enums.ErrorCodeConstants.*;
 
 /**
  * 优惠劵模板 Service 实现类
@@ -43,6 +41,16 @@ public class CouponTemplateServiceImpl implements CouponTemplateService {
     private ProductSpuApi productSpuApi;
 
     @Override
+    public boolean isTakeLimitCountUnlimited(Integer takeLimitCount) {
+        return CouponTemplateDO.TAKE_LIMIT_COUNT_MAX.equals(takeLimitCount);
+    }
+
+    @Override
+    public boolean isTotalCountUnlimited(Integer totalCount) {
+        return CouponTemplateDO.TOTAL_COUNT_MAX.equals(totalCount);
+    }
+
+    @Override
     public Long createCouponTemplate(CouponTemplateCreateReqVO createReqVO) {
         // 校验商品范围
         validateProductScope(createReqVO.getProductScope(), createReqVO.getProductScopeValues());
@@ -60,7 +68,7 @@ public class CouponTemplateServiceImpl implements CouponTemplateService {
         CouponTemplateDO couponTemplate = validateCouponTemplateExists(updateReqVO.getId());
         // 校验发放数量不能过小（仅在 CouponTakeTypeEnum.USER 用户领取时）
         if (CouponTakeTypeEnum.isUser(couponTemplate.getTakeType())
-                && ObjUtil.notEqual(couponTemplate.getTakeLimitCount(), CouponTemplateDO.TIME_LIMIT_COUNT_MAX) // 非不限制
+                && !isTotalCountUnlimited(updateReqVO.getTotalCount()) // 非不限制总发放数量
                 && updateReqVO.getTotalCount() < couponTemplate.getTakeCount()) {
             throw exception(COUPON_TEMPLATE_TOTAL_COUNT_TOO_SMALL, couponTemplate.getTakeCount());
         }
@@ -116,7 +124,10 @@ public class CouponTemplateServiceImpl implements CouponTemplateService {
 
     @Override
     public void updateCouponTemplateTakeCount(Long id, int incrCount) {
-        couponTemplateMapper.updateTakeCount(id, incrCount);
+        int updateCount = couponTemplateMapper.updateTakeCount(id, incrCount);
+        if (updateCount == 0) {
+            throw exception(COUPON_TEMPLATE_NOT_ENOUGH);
+        }
     }
 
     @Override
@@ -132,7 +143,7 @@ public class CouponTemplateServiceImpl implements CouponTemplateService {
 
     @Override
     public List<CouponTemplateDO> getCouponTemplateList(Collection<Long> ids) {
-        return couponTemplateMapper.selectBatchIds(ids);
+        return couponTemplateMapper.selectByIds(ids);
     }
 
 }
